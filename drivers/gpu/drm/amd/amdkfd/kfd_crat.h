@@ -127,7 +127,7 @@ struct crat_subtype_memory {
 	uint8_t		length;
 	uint16_t	reserved;
 	uint32_t	flags;
-	uint32_t	promixity_domain;
+	uint32_t	proximity_domain;
 	uint32_t	base_addr_low;
 	uint32_t	base_addr_high;
 	uint32_t	length_low;

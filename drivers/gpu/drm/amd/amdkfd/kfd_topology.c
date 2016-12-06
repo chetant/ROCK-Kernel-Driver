@@ -895,7 +895,7 @@ int kfd_topology_remove_device(struct kfd_dev *gpu)
 
 	up_write(&topology_lock);
 
-	if (res == 0)
+	if (!res)
 		kfd_notify_gpu_change(gpu_id, 0);
 
 	return res;

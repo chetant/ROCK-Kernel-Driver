@@ -91,11 +91,11 @@ static int kfd_parse_subtype_mem(struct crat_subtype_memory *mem)
 	int i = 0;
 
 	pr_info("Found memory entry in CRAT table with proximity_domain=%d\n",
-			mem->promixity_domain);
+			mem->proximity_domain);
 	list_for_each_entry(dev, &topology_device_list, list) {
-		if (mem->promixity_domain == i) {
+		if (mem->proximity_domain == i) {
 			props = kfd_alloc_struct(props);
-			if (props == NULL)
+			if (!props)
 				return -ENOMEM;
 
 			if (dev->node_props.cpu_cores_count == 0)
@@ -141,7 +141,7 @@ static int kfd_parse_subtype_cache(struct crat_subtype_cache *cache)
 		if (id == dev->node_props.cpu_core_id_base ||
 		    id == dev->node_props.simd_id_base) {
 			props = kfd_alloc_struct(props);
-			if (props == NULL)
+			if (!props)
 				return -ENOMEM;
 
 			props->processor_id_low = id;
@@ -190,7 +190,7 @@ static int kfd_parse_subtype_iolink(struct crat_subtype_iolink *iolink)
 	list_for_each_entry(dev, &topology_device_list, list) {
 		if (id_from == i) {
 			props = kfd_alloc_struct(props);
-			if (props == NULL)
+			if (!props)
 				return -ENOMEM;
 
 			props->node_from = id_from;
@@ -260,7 +260,7 @@ static int kfd_parse_subtype(struct crat_subtype_generic *sub_type_hdr)
 		ret = kfd_parse_subtype_iolink(iolink);
 		break;
 	default:
-		pr_warn("Unknown subtype (%d) in CRAT\n",
+		pr_warn("Unknown subtype %d in CRAT\n",
 				sub_type_hdr->type);
 	}
 
