@@ -41,6 +41,7 @@ static const struct kfd_device_info kaveri_device_info = {
 	.num_of_watch_points = 4,
 	.mqd_size_aligned = MQD_SIZE_ALIGNED,
 	.supports_cwsr = false,
+	.needs_pci_atomics = false,
 };
 
 static const struct kfd_device_info carrizo_device_info = {
@@ -53,6 +54,7 @@ static const struct kfd_device_info carrizo_device_info = {
 	.num_of_watch_points = 4,
 	.mqd_size_aligned = MQD_SIZE_ALIGNED,
 	.supports_cwsr = true,
+	.needs_pci_atomics = false,
 };
 
 struct kfd_deviceid {
@@ -125,6 +127,17 @@ struct kfd_dev *kgd2kfd_probe(struct kgd_dev *kgd,
 	if (!device_info) {
 		dev_err(kfd_device, "kgd2kfd_probe failed\n");
 		return NULL;
+	}
+
+	if (device_info->needs_pci_atomics) {
+		/* Allow BIF to recode atomics to PCIe 3.0 AtomicOps.
+		 */
+		if (pci_enable_atomic_ops_to_root(pdev) < 0) {
+			dev_info(kfd_device,
+				"skipped device %x:%x, PCI rejects atomics",
+				 pdev->vendor, pdev->device);
+			return NULL;
+		}
 	}
 
 	kfd = kzalloc(sizeof(*kfd), GFP_KERNEL);
