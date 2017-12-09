@@ -173,14 +173,17 @@ static void kfd_process_wq_release(struct work_struct *work)
 {
 	struct kfd_process *p = container_of(work, struct kfd_process,
 					     release_work);
+#if defined(CONFIG_AMD_IOMMU_V2_MODULE) || defined(CONFIG_AMD_IOMMU_V2)
 	struct kfd_process_device *pdd;
 
 	pr_debug("Releasing process (pasid %d) in workqueue\n", p->pasid);
 
 	list_for_each_entry(pdd, &p->per_device_data, per_device_list) {
-		if (pdd->bound == PDD_BOUND)
+		if (pdd->bound == PDD_BOUND &&
+		    pdd->dev->device_info->needs_iommu_device)
 			amd_iommu_unbind_pasid(pdd->dev->pdev, p->pasid);
 	}
+#endif
 
 	kfd_process_destroy_pdds(p);
 
@@ -421,7 +424,6 @@ struct kfd_process_device *kfd_bind_process_to_device(struct kfd_dev *dev,
 							struct kfd_process *p)
 {
 	struct kfd_process_device *pdd;
-	int err;
 
 	pdd = kfd_get_process_device_data(dev, p);
 	if (!pdd) {
@@ -436,9 +438,14 @@ struct kfd_process_device *kfd_bind_process_to_device(struct kfd_dev *dev,
 		return ERR_PTR(-EINVAL);
 	}
 
-	err = amd_iommu_bind_pasid(dev->pdev, p->pasid, p->lead_thread);
-	if (err < 0)
-		return ERR_PTR(err);
+#if defined(CONFIG_AMD_IOMMU_V2_MODULE) || defined(CONFIG_AMD_IOMMU_V2)
+	if (dev->device_info->needs_iommu_device) {
+		int err = amd_iommu_bind_pasid(dev->pdev, p->pasid,
+					       p->lead_thread);
+		if (err < 0)
+			return ERR_PTR(err);
+	}
+#endif
 
 	pdd->bound = PDD_BOUND;
 

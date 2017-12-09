@@ -837,6 +837,7 @@ static void lookup_events_by_type_and_signal(struct kfd_process *p,
 	}
 }
 
+#if defined(CONFIG_AMD_IOMMU_V2_MODULE) || defined(CONFIG_AMD_IOMMU_V2)
 void kfd_signal_iommu_event(struct kfd_dev *dev, unsigned int pasid,
 		unsigned long address, bool is_write_requested,
 		bool is_execute_requested)
@@ -905,6 +906,7 @@ void kfd_signal_iommu_event(struct kfd_dev *dev, unsigned int pasid,
 	mutex_unlock(&p->event_mutex);
 	kfd_unref_process(p);
 }
+#endif /* CONFIG_AMD_IOMMU_V2_MODULE */
 
 void kfd_signal_hw_exception_event(unsigned int pasid)
 {

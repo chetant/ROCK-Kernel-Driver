@@ -20,7 +20,9 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
+#if defined(CONFIG_AMD_IOMMU_V2_MODULE) || defined(CONFIG_AMD_IOMMU_V2)
 #include <linux/amd-iommu.h>
+#endif
 #include <linux/bsearch.h>
 #include <linux/pci.h>
 #include <linux/slab.h>
@@ -31,6 +33,7 @@
 
 #define MQD_SIZE_ALIGNED 768
 
+#if defined(CONFIG_AMD_IOMMU_V2_MODULE) || defined(CONFIG_AMD_IOMMU_V2)
 static const struct kfd_device_info kaveri_device_info = {
 	.asic_family = CHIP_KAVERI,
 	.max_pasid_bits = 16,
@@ -41,6 +44,7 @@ static const struct kfd_device_info kaveri_device_info = {
 	.num_of_watch_points = 4,
 	.mqd_size_aligned = MQD_SIZE_ALIGNED,
 	.supports_cwsr = false,
+	.needs_iommu_device = true,
 	.needs_pci_atomics = false,
 };
 
@@ -54,8 +58,10 @@ static const struct kfd_device_info carrizo_device_info = {
 	.num_of_watch_points = 4,
 	.mqd_size_aligned = MQD_SIZE_ALIGNED,
 	.supports_cwsr = true,
+	.needs_iommu_device = true,
 	.needs_pci_atomics = false,
 };
+#endif
 
 struct kfd_deviceid {
 	unsigned short did;
@@ -64,6 +70,7 @@ struct kfd_deviceid {
 
 /* Please keep this sorted by increasing device id. */
 static const struct kfd_deviceid supported_devices[] = {
+#if defined(CONFIG_AMD_IOMMU_V2_MODULE) || defined(CONFIG_AMD_IOMMU_V2)
 	{ 0x1304, &kaveri_device_info },	/* Kaveri */
 	{ 0x1305, &kaveri_device_info },	/* Kaveri */
 	{ 0x1306, &kaveri_device_info },	/* Kaveri */
@@ -91,6 +98,7 @@ static const struct kfd_deviceid supported_devices[] = {
 	{ 0x9875, &carrizo_device_info },	/* Carrizo */
 	{ 0x9876, &carrizo_device_info },	/* Carrizo */
 	{ 0x9877, &carrizo_device_info }	/* Carrizo */
+#endif
 };
 
 static int kfd_gtt_sa_init(struct kfd_dev *kfd, unsigned int buf_size,
@@ -157,6 +165,7 @@ struct kfd_dev *kgd2kfd_probe(struct kgd_dev *kgd,
 	return kfd;
 }
 
+#if defined(CONFIG_AMD_IOMMU_V2_MODULE) || defined(CONFIG_AMD_IOMMU_V2)
 static bool device_iommu_pasid_init(struct kfd_dev *kfd)
 {
 	const u32 required_iommu_flags = AMD_IOMMU_DEVICE_FLAG_ATS_SUP |
@@ -227,6 +236,7 @@ static int iommu_invalid_ppr_cb(struct pci_dev *pdev, int pasid,
 
 	return AMD_IOMMU_INV_PRI_RSP_INVALID;
 }
+#endif /* CONFIG_AMD_IOMMU_V2 */
 
 static void kfd_cwsr_init(struct kfd_dev *kfd)
 {
@@ -317,12 +327,14 @@ bool kgd2kfd_device_init(struct kfd_dev *kfd,
 		goto device_queue_manager_error;
 	}
 
-	if (!device_iommu_pasid_init(kfd)) {
-		dev_err(kfd_device,
-			"Error initializing iommuv2 for device %x:%x\n",
-			kfd->pdev->vendor, kfd->pdev->device);
-		goto device_iommu_pasid_error;
+#if defined(CONFIG_AMD_IOMMU_V2_MODULE) || defined(CONFIG_AMD_IOMMU_V2)
+	if (kfd->device_info->needs_iommu_device) {
+		if (!device_iommu_pasid_init(kfd)) {
+			dev_err(kfd_device, "Error initializing iommuv2\n");
+			goto device_iommu_pasid_error;
+		}
 	}
+#endif
 
 	kfd_cwsr_init(kfd);
 
@@ -382,11 +394,16 @@ void kgd2kfd_suspend(struct kfd_dev *kfd)
 
 	kfd->dqm->ops.stop(kfd->dqm);
 
+#if defined(CONFIG_AMD_IOMMU_V2_MODULE) || defined(CONFIG_AMD_IOMMU_V2)
+	if (!kfd->device_info->needs_iommu_device)
+		return;
+
 	kfd_unbind_processes_from_device(kfd);
 
 	amd_iommu_set_invalidate_ctx_cb(kfd->pdev, NULL);
 	amd_iommu_set_invalid_ppr_cb(kfd->pdev, NULL);
 	amd_iommu_free_device(kfd->pdev);
+#endif
 }
 
 int kgd2kfd_resume(struct kfd_dev *kfd)
@@ -401,19 +418,24 @@ int kgd2kfd_resume(struct kfd_dev *kfd)
 static int kfd_resume(struct kfd_dev *kfd)
 {
 	int err = 0;
-	unsigned int pasid_limit = kfd_get_pasid_limit();
 
-	err = amd_iommu_init_device(kfd->pdev, pasid_limit);
-	if (err)
-		return -ENXIO;
-	amd_iommu_set_invalidate_ctx_cb(kfd->pdev,
-					iommu_pasid_shutdown_callback);
-	amd_iommu_set_invalid_ppr_cb(kfd->pdev,
-				     iommu_invalid_ppr_cb);
+#if defined(CONFIG_AMD_IOMMU_V2_MODULE) || defined(CONFIG_AMD_IOMMU_V2)
+	if (kfd->device_info->needs_iommu_device) {
+		unsigned int pasid_limit = kfd_get_pasid_limit();
 
-	err = kfd_bind_processes_to_device(kfd);
-	if (err)
-		goto processes_bind_error;
+		err = amd_iommu_init_device(kfd->pdev, pasid_limit);
+		if (err)
+			return -ENXIO;
+		amd_iommu_set_invalidate_ctx_cb(kfd->pdev,
+						iommu_pasid_shutdown_callback);
+		amd_iommu_set_invalid_ppr_cb(kfd->pdev,
+					     iommu_invalid_ppr_cb);
+
+		err = kfd_bind_processes_to_device(kfd);
+		if (err)
+			goto processes_bind_error;
+	}
+#endif
 
 	err = kfd->dqm->ops.start(kfd->dqm);
 	if (err) {
@@ -427,8 +449,10 @@ static int kfd_resume(struct kfd_dev *kfd)
 
 dqm_start_error:
 processes_bind_error:
-	amd_iommu_free_device(kfd->pdev);
-
+#if defined(CONFIG_AMD_IOMMU_V2_MODULE) || defined(CONFIG_AMD_IOMMU_V2)
+	if (kfd->device_info->needs_iommu_device)
+		amd_iommu_free_device(kfd->pdev);
+#endif
 	return err;
 }
 
